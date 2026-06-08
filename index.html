@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ Thống Hạt: Ghép Ảnh Tương Lai</title>
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- MediaPipe Hands -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #020205; 
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: white;
+            user-select: none;
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            background: radial-gradient(circle at center, #0a0a1a 0%, #000000 100%);
+        }
+
+        #input_video { display: none; }
+
+        #toggle-menu-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 20;
+            background: rgba(0, 210, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 210, 255, 0.3);
+            color: #00d2ff;
+            padding: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: none;
+            box-shadow: 0 0 15px rgba(0, 210, 255, 0.2);
+        }
+
+        /* Bảng Điều Khiển */
+        #ui-layer {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 20;
+            background: rgba(10, 15, 30, 0.75);
+            backdrop-filter: blur(15px);
+            padding: 20px;
+            border-radius: 16px;
+            border: 1px solid rgba(0, 210, 255, 0.15);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.7);
+            width: 280px;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s;
+            max-height: 85vh;
+            overflow-y: auto;
+        }
+
+        #ui-layer.hidden {
+            transform: translateX(-150%);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .ui-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(0, 210, 255, 0.2);
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: #00d2ff;
+            text-shadow: 0 0 10px rgba(0, 210, 255, 0.5);
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: #00d2ff;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0 5px;
+            line-height: 1;
+        }
+
+        label {
+            display: block;
+            font-size: 10px;
+            color: #8aa;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-weight: 600;
+        }
+
+        select, button.action-btn, .file-upload-label {
+            width: 100%;
+            padding: 12px;
+            background: rgba(0, 210, 255, 0.05);
+            border: 1px solid rgba(0, 210, 255, 0.2);
+            border-radius: 8px;
+            color: #cdf;
+            font-size: 13px;
+            outline: none;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
+            box-sizing: border-box;
+            display: inline-block;
+            text-align: center;
+        }
+
+        select:hover, button.action-btn:hover, .file-upload-label:hover {
+            background: rgba(0, 210, 255, 0.15);
+            border-color: rgba(0, 210, 255, 0.5);
+            box-shadow: 0 0 15px rgba(0, 210, 255, 0.2);
+        }
+
+        /* Upload Button Style */
+        .file-upload-label {
+            margin-top: 5px;
+            background: rgba(189, 0, 255, 0.1);
+            border-color: rgba(189, 0, 255, 0.3);
+            color: #e0aaff;
+        }
+        .file-upload-label:hover {
+            background: rgba(189, 0, 255, 0.2);
+            border-color: rgba(189, 0, 255, 0.6);
+            box-shadow: 0 0 15px rgba(189, 0, 255, 0.3);
+        }
+
+        .color-wrapper {
+            position: relative;
+            height: 40px;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid rgba(0, 210, 255, 0.2);
+        }
+        input[type="color"] {
+            width: 150%; 
+            height: 150%;
+            border: none;
+            position: absolute;
+            top: -25%;
+            left: -25%;
+            cursor: pointer;
+            padding: 0;
+            background: none;
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            margin-top: 20px;
+            font-size: 12px;
+            color: #aef;
+            background: rgba(0, 20, 40, 0.5);
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 210, 255, 0.1);
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #333;
+            margin-right: 10px;
+            box-shadow: 0 0 0 rgba(0,0,0,0);
+            transition: all 0.3s;
+        }
+
+        .dot.active {
+            background-color: #00d2ff;
+            box-shadow: 0 0 10px #00d2ff, 0 0 20px #00d2ff;
+        }
+
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, #1a1a2e 0%, #000 100%);
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            text-align: center;
+        }
+
+        #start-btn {
+            margin-top: 30px;
+            padding: 15px 40px;
+            background: linear-gradient(90deg, #00d2ff, #007bff);
+            border: none;
+            color: white;
+            font-weight: 700;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 0 30px rgba(0, 210, 255, 0.4);
+        }
+
+        #start-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 50px rgba(0, 210, 255, 0.6);
+        }
+
+        #loader {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            z-index: 100;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            color: #00d2ff;
+            font-family: monospace;
+        }
+        
+        #cam-preview {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 160px;
+            height: 120px;
+            border-radius: 12px;
+            border: 1px solid rgba(0, 210, 255, 0.3);
+            z-index: 9;
+            background: #000;
+            overflow: hidden;
+            transform: scaleX(-1);
+            pointer-events: none;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+        }
+        #cam-preview video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            opacity: 0.7; 
+        }
+
+        @media (max-width: 600px) {
+            #ui-layer {
+                width: calc(100% - 60px);
+                max-width: 320px;
+                top: 10px;
+                left: 10px;
+            }
+            #cam-preview {
+                width: 100px;
+                height: 75px;
+                bottom: 10px;
+                right: 10px;
+            }
+            #toggle-menu-btn {
+                top: 10px;
+                left: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="start-screen">
+        <h1 style="font-size: 3em; margin-bottom: 0; text-shadow: 0 0 30px rgba(0,210,255,0.5);">CYBER PARTICLE</h1>
+        <p style="color: #8aa; margin-top: 10px; font-weight: 300; letter-spacing: 1px;">Biến ảnh thành hạt & Tương tác không gian</p>
+        <button id="start-btn">KHỞI ĐỘNG HỆ THỐNG</button>
+    </div>
+
+    <div id="loader">
+        <div class="spinner" style="border-radius: 50%; width: 40px; height: 40px; border: 4px solid #333; border-top-color: #00d2ff; animation: spin 1s linear infinite;"></div>
+        <div id="loading-text" style="margin-top:10px;">Đang tải mô-đun thị giác...</div>
+        <button id="retry-btn" style="display:none; margin-top: 20px; padding: 10px 20px; background: #ff4444; border: none; color: white; border-radius: 8px; cursor: pointer;">Thử lại</button>
+    </div>
+
+    <button id="toggle-menu-btn">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    </button>
+
+    <div id="ui-layer">
+        <div class="ui-header">
+            <h1>THIẾT LẬP</h1>
+            <button class="close-btn" id="close-menu-btn">×</button>
+        </div>
+        
+        <div class="control-group">
+            <label>CHẾ ĐỘ HIỂN THỊ</label>
+            <select id="shape-select">
+                <option value="heart">Trái Tim Năng Lượng</option>
+                <option value="sphere">Tinh Vân Cầu</option>
+                <option value="cube">Khối Lập Phương Số</option>
+                <option value="torus">Vòng Xoáy Năng Lượng</option>
+                <option value="galaxy">Thiên Hà Đa Chiều</option>
+                <option value="dna">Chuỗi DNA Số</option>
+                <option value="image" style="color: #e0aaff; font-weight: bold;">✨ Chế Độ Ảnh Hạt</option>
+            </select>
+        </div>
+
+        <!-- Image Upload Input (Hidden) -->
+        <input type="file" id="image-upload" accept="image/*" style="display: none;">
+        
+        <div class="control-group" id="upload-group" style="display: none;">
+            <label>TẢI ẢNH CỦA BẠN</label>
+            <label for="image-upload" class="file-upload-label">
+                📷 CHỌN ẢNH TỪ MÁY
+            </label>
+        </div>
+
+        <div class="control-group">
+            <label>MÀU CHỦ ĐẠO (Cho Hình Khối)</label>
+            <div class="color-wrapper">
+                <input type="color" id="color-picker" value="#ff0055">
+            </div>
+        </div>
+
+        <button id="fullscreen-btn" class="action-btn">CHẾ ĐỘ TOÀN MÀN HÌNH</button>
+
+        <div class="status-indicator">
+            <div id="status-dot" class="dot"></div>
+            <span id="status-text">Đang quét bàn tay...</span>
+        </div>
+        <div style="font-size: 10px; color: #688; margin-top: 10px; line-height: 1.5; font-family: monospace;">
+            > HAND_OPEN: HIỆN ẢNH / EXPAND<br>
+            > HAND_CLOSE: VỠ ẢNH / IMPLODE
+        </div>
+    </div>
+
+    <div id="cam-preview"></div>
+    <video id="input_video"></video>
+    <div id="canvas-container"></div>
+
+    <script>
+        // --- 1. CẤU HÌNH ---
+        const config = {
+            particleCount: 8000, 
+            particleSize: 0.2, 
+            baseColor: new THREE.Color(0xff0055), // Màu đỏ hồng
+            secondaryColor: new THREE.Color(0xff88aa), // Hồng nhạt
+            currentShape: 'heart',
+            handOpenFactor: 0.5,
+            targetHandFactor: 0.5,
+            handPosition: new THREE.Vector3(0, 0, 0),
+            targetHandPosition: new THREE.Vector3(0, 0, 0)
+        };
+
+        // Biến lưu dữ liệu ảnh
+        let loadedImagePixels = null; 
+
+        // --- 2. THREE.JS SETUP ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x020205, 0.02);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 15;
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        container.appendChild(renderer.domElement);
+
+        // --- 3. XỬ LÝ ẢNH THÀNH HẠT ---
+        function createImageParticles(image) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Resize ảnh để đảm bảo mật độ hạt tốt (khoảng 150-200px chiều rộng)
+            const scaleSize = 180;
+            const ratio = image.height / image.width;
+            canvas.width = scaleSize;
+            canvas.height = scaleSize * ratio;
+
+            ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+            
+            const pixels = [];
+            
+            // Quét pixel
+            for (let y = 0; y < canvas.height; y++) {
+                for (let x = 0; x < canvas.width; x++) {
+                    const i = (y * canvas.width + x) * 4;
+                    const r = imgData[i];
+                    const g = imgData[i + 1];
+                    const b = imgData[i + 2];
+                    const a = imgData[i + 3];
+
+                    // Chỉ lấy pixel có độ hiển thị cao
+                    if (a > 100) {
+                        // Chuyển đổi tọa độ 2D sang 3D center
+                        const px = (x - canvas.width / 2) * 0.12; 
+                        const py = -(y - canvas.height / 2) * 0.12; // Đảo ngược Y
+                        const pz = 0;
+                        
+                        pixels.push({
+                            x: px, y: py, z: pz,
+                            r: r / 255, g: g / 255, b: b / 255
+                        });
+                    }
+                }
+            }
+            return pixels;
+        }
+
+        // Tạo ảnh mặc định (Chữ FUTURE)
+        function createDefaultImage() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 300;
+            canvas.height = 100;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0,0,300,100);
+            ctx.fillStyle = '#00d2ff';
+            ctx.font = 'bold 60px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('FUTURE', 150, 50);
+            
+            const img = new Image();
+            img.src = canvas.toDataURL();
+            return img;
+        }
+
+        // Tải ảnh mặc định ban đầu
+        const defaultImg = createDefaultImage();
+        defaultImg.onload = () => {
+            loadedImagePixels = createImageParticles(defaultImg);
+        };
+
+        // --- 4. TẠO TEXTURE & MATERIAL ---
+        function createLightTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const context = canvas.getContext('2d');
+            const gradient = context.createRadialGradient(32, 32, 0, 32, 32, 32);
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 1)');
+            gradient.addColorStop(0.2, 'rgba(240, 255, 255, 0.6)');
+            gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            context.fillStyle = gradient;
+            context.fillRect(0, 0, 64, 64);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        let particles;
+        let positionsOriginal = []; 
+        let colorsOriginal = [];
+
+        const material = new THREE.PointsMaterial({
+            size: config.particleSize,
+            map: createLightTexture(),
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.9,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+
+        function generateParticles(shape) {
+            const geometry = new THREE.BufferGeometry();
+            const positions = [];
+            const colors = [];
+            positionsOriginal = [];
+            colorsOriginal = [];
+
+            let cnt = config.particleCount;
+            
+            // Xử lý riêng cho chế độ IMAGE
+            if (shape === 'image' && loadedImagePixels) {
+                // Nếu số lượng pixel ít hơn số lượng hạt mong muốn, ta lặp lại hoặc lấy mẫu ngẫu nhiên
+                // Nếu nhiều hơn, ta lấy mẫu ngẫu nhiên
+                const pixels = loadedImagePixels;
+                cnt = config.particleCount; // Giữ nguyên số lượng hạt để hiệu ứng mượt
+                
+                for(let i=0; i<cnt; i++) {
+                    // Lấy ngẫu nhiên một pixel từ ảnh
+                    const p = pixels[Math.floor(Math.random() * pixels.length)];
+                    
+                    // Vị trí gốc (theo ảnh)
+                    // Thêm chút nhiễu Z để ảnh có độ dày 3D nhẹ
+                    positionsOriginal.push(p.x, p.y, p.z + (Math.random()-0.5)*0.5);
+                    colorsOriginal.push(p.r, p.g, p.b);
+
+                    // Vị trí ban đầu (ngẫu nhiên để bay vào)
+                    positions.push((Math.random()-0.5)*30, (Math.random()-0.5)*30, (Math.random()-0.5)*30);
+                    colors.push(p.r, p.g, p.b);
+                }
+            } 
+            else {
+                // Logic hình học cũ
+                const color1 = config.baseColor;
+                const color2 = config.secondaryColor;
+
+                for (let i = 0; i < cnt; i++) {
+                    let x, y, z;
+                    
+                    if (shape === 'heart') {
+                        // Phương trình toán học tạo trái tim 3D bồng bềnh
+                        const t = Math.random() * Math.PI * 2;
+                        // Phân bố hạt: tập trung % lớn ở lớp vỏ để tạo viền sắc nét, phần còn lại lấp đầy bên trong
+                        const fill = Math.random() > 0.4 ? Math.pow(Math.random(), 0.5) : 1; 
+                        const scaleFactor = 0.4; // Phóng to trái tim lên một chút
+                        
+                        // Phương trình tham số 2D cơ bản
+                        const hx = 16 * Math.pow(Math.sin(t), 3);
+                        const hy = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t);
+                        
+                        // Dịch tâm hình học xuống gốc tọa độ (0,0) trước khi phủ đầy (fill)
+                        const shiftedHy = hy + 2.5; 
+                        
+                        x = hx * scaleFactor * fill;
+                        y = shiftedHy * scaleFactor * fill;
+                        
+                        // Trục Z tạo khối 3D (phình to ở tâm và dẹp nhọn ở viền)
+                        z = (Math.random() - 0.5) * 4.5 * Math.sqrt(1 - fill);
+                    } else if (shape === 'sphere') {
+                        const r = 6 * Math.cbrt(Math.random()); 
+                        const theta = Math.random() * 2 * Math.PI;
+                        const phi = Math.acos(2 * Math.random() - 1);
+                        x = r * Math.sin(phi) * Math.cos(theta);
+                        y = r * Math.sin(phi) * Math.sin(theta);
+                        z = r * Math.cos(phi);
+                    } else if (shape === 'cube') {
+                        const size = 8;
+                        x = (Math.random() - 0.5) * size;
+                        y = (Math.random() - 0.5) * size;
+                        z = (Math.random() - 0.5) * size;
+                    } else if (shape === 'torus') {
+                        const R = 4; const r = 1.2; 
+                        const u = Math.random() * Math.PI * 2;
+                        const v = Math.random() * Math.PI * 2;
+                        x = (R + r * Math.cos(v)) * Math.cos(u);
+                        y = (R + r * Math.cos(v)) * Math.sin(u);
+                        z = r * Math.sin(v);
+                    } else if (shape === 'galaxy') {
+                        const arms = 5; 
+                        const radius = Math.random() * 7;
+                        const spinAngle = radius * 0.8;
+                        const armAngle = (Math.PI * 2 * (i % arms)) / arms;
+                        x = Math.cos(spinAngle + armAngle) * radius + (Math.random() - 0.5);
+                        y = (Math.random() - 0.5); 
+                        z = Math.sin(spinAngle + armAngle) * radius + (Math.random() - 0.5);
+                    } else { // DNA
+                        const h = (Math.random() - 0.5) * 14; 
+                        const radius = 2;
+                        const twist = h * 1.5;
+                        const strand = Math.random() > 0.5 ? 0 : Math.PI;
+                        x = Math.cos(twist + strand) * radius + (Math.random()-0.5)*0.3;
+                        z = Math.sin(twist + strand) * radius + (Math.random()-0.5)*0.3;
+                        y = h;
+                    }
+
+                    positionsOriginal.push(x, y, z);
+                    positions.push(x, y, z);
+
+                    // Màu sắc hình học
+                    const dist = Math.sqrt(x*x + y*y + z*z);
+                    const ratio = Math.min(1, dist / 8);
+                    const r = color1.r * (1 - ratio) + color2.r * ratio;
+                    const g = color1.g * (1 - ratio) + color2.g * ratio;
+                    const b = color1.b * (1 - ratio) + color2.b * ratio;
+                    
+                    colorsOriginal.push(r, g, b);
+                    colors.push(r, g, b);
+                }
+            }
+
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+            
+            if (particles) scene.remove(particles);
+            particles = new THREE.Points(geometry, material);
+            scene.add(particles);
+        }
+
+        // --- 5. LOGIC HOẠT HỌA ---
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = clock.getElapsedTime();
+            
+            config.handOpenFactor += (config.targetHandFactor - config.handOpenFactor) * 0.1;
+            config.handPosition.lerp(config.targetHandPosition, 0.08);
+
+            // Kiểm tra particles có tồn tại không trước khi truy cập geometry
+            if (particles && particles.geometry) {
+                particles.position.x = config.handPosition.x;
+                particles.position.y = config.handPosition.y;
+
+                // Nếu là ảnh, hạn chế xoay để người dùng xem được ảnh
+                if (config.currentShape === 'image') {
+                    particles.rotation.y = THREE.MathUtils.lerp(particles.rotation.y, 0, 0.05);
+                    particles.rotation.z = THREE.MathUtils.lerp(particles.rotation.z, 0, 0.05);
+                } else if (config.currentShape === 'heart') {
+                    particles.rotation.y = time * 0.15; // Xoay ngang vừa phải để ngắm khối 3D
+                    particles.rotation.z = Math.sin(time * 1.5) * 0.03; // Lắc lư cực nhẹ hai bên, không lộn nhào
+                } else {
+                    particles.rotation.y = time * 0.1;
+                    particles.rotation.z = time * 0.05; // Các hình khác có thể xoay chéo tự do
+                }
+
+                const positions = particles.geometry.attributes.position.array;
+                const colors = particles.geometry.attributes.color.array;
+                
+                // Logic hành vi hạt
+                // Khi mở tay (factor ~ 1): Hạt về vị trí gốc (Hiển thị ảnh/hình rõ nét)
+                // Khi nắm tay (factor ~ 0): Hạt bay loạn xạ hoặc co cụm (Vỡ ảnh)
+                
+                const isImage = config.currentShape === 'image';
+                const explosionFactor = 1 - config.handOpenFactor; // 0 = Ổn định, 1 = Nổ
+
+                // Tối ưu: Tính toán scale và nhịp thở một lần bên ngoài vòng lặp
+                const currentScale = 0.2 + (config.handOpenFactor * 1.0);
+                const noiseAmp = 0.3 * config.handOpenFactor;
+                let currentBreathe = 1;
+                
+                if (config.currentShape === 'heart') {
+                    // Trái tim đập dồn dập (thump-thump)
+                    currentBreathe = 1 + (Math.sin(time * 5) * 0.04 + Math.sin(time * 10) * 0.02) * config.handOpenFactor;
+                } else {
+                    // Các khối khác thở đều
+                    currentBreathe = 1 + Math.sin(time * 1.5) * 0.05 * config.handOpenFactor;
+                }
+
+                for (let i = 0; i < config.particleCount; i++) {
+                    const i3 = i * 3;
+                    const ox = positionsOriginal[i3];
+                    const oy = positionsOriginal[i3 + 1];
+                    const oz = positionsOriginal[i3 + 2];
+
+                    let tx, ty, tz;
+
+                    if (isImage) {
+                        // Chế độ ảnh: 
+                        // Mở tay = Về đúng vị trí ảnh
+                        // Nắm tay = Bay ra ngoài ngẫu nhiên
+                        const noise = 15 * explosionFactor; 
+                        // Dùng sin/cos theo thời gian để tạo quỹ đạo bay khi vỡ
+                        const dirX = Math.sin(time + i) * noise;
+                        const dirY = Math.cos(time + i * 0.5) * noise;
+                        const dirZ = Math.sin(time + i * 2) * noise;
+
+                        tx = ox + dirX;
+                        ty = oy + dirY;
+                        tz = oz + dirZ;
+                    } else {
+                        // Chế độ hình khối: Kết hợp nhịp thở và chuyển động nhiễu
+                        const nx = Math.sin(time * 1.5 + oy) * noiseAmp;
+                        const ny = Math.cos(time * 1.5 + oz) * noiseAmp;
+                        const nz = Math.sin(time * 1.5 + ox) * noiseAmp;
+
+                        tx = ox * currentScale * currentBreathe + nx;
+                        ty = oy * currentScale * currentBreathe + ny;
+                        tz = oz * currentScale * currentBreathe + nz;
+                    }
+
+                    const speed = 0.1; 
+                    positions[i3] += (tx - positions[i3]) * speed;
+                    positions[i3 + 1] += (ty - positions[i3 + 1]) * speed;
+                    positions[i3 + 2] += (tz - positions[i3 + 2]) * speed;
+                    
+                    // Cập nhật màu (nếu cần thiết, ví dụ muốn nhấp nháy khi nắm tay)
+                    // Hiện tại giữ nguyên màu gốc của ảnh
+                    colors[i3] = colorsOriginal[i3];
+                    colors[i3+1] = colorsOriginal[i3+1];
+                    colors[i3+2] = colorsOriginal[i3+2];
+                }
+
+                particles.geometry.attributes.position.needsUpdate = true;
+                particles.geometry.attributes.color.needsUpdate = true;
+            }
+            
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // --- 6. XỬ LÝ SỰ KIỆN TẢI ẢNH ---
+        const imageUpload = document.getElementById('image-upload');
+        const uploadGroup = document.getElementById('upload-group');
+        const shapeSelect = document.getElementById('shape-select');
+
+        // Khi chọn chế độ
+        shapeSelect.addEventListener('change', (e) => {
+            config.currentShape = e.target.value;
+            
+            if (config.currentShape === 'image') {
+                uploadGroup.style.display = 'block';
+                // Nếu chưa có ảnh pixel, dùng ảnh mặc định
+                if (!loadedImagePixels && defaultImg.complete) {
+                    loadedImagePixels = createImageParticles(defaultImg);
+                }
+            } else {
+                uploadGroup.style.display = 'none';
+            }
+            generateParticles(config.currentShape);
+        });
+
+        // Khi tải ảnh lên
+        imageUpload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const img = new Image();
+                    img.onload = function() {
+                        loadedImagePixels = createImageParticles(img);
+                        // Tự động chuyển sang chế độ ảnh và tái tạo hạt
+                        if (shapeSelect.value !== 'image') {
+                            shapeSelect.value = 'image';
+                            config.currentShape = 'image';
+                            uploadGroup.style.display = 'block';
+                        }
+                        generateParticles('image');
+                    }
+                    img.src = event.target.result;
+                }
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // --- CÁC SỰ KIỆN KHÁC (UI, HAND TRACKING) ---
+        // (Giữ nguyên logic cũ cho UI và MediaPipe)
+        
+        const uiLayer = document.getElementById('ui-layer');
+        const toggleMenuBtn = document.getElementById('toggle-menu-btn');
+        const closeMenuBtn = document.getElementById('close-menu-btn');
+
+        function toggleMenu() {
+            const isHidden = uiLayer.classList.contains('hidden');
+            if (isHidden) {
+                uiLayer.classList.remove('hidden');
+                toggleMenuBtn.style.display = 'none';
+            } else {
+                uiLayer.classList.add('hidden');
+                setTimeout(() => { toggleMenuBtn.style.display = 'block'; }, 300);
+            }
+        }
+        toggleMenuBtn.addEventListener('click', toggleMenu);
+        closeMenuBtn.addEventListener('click', toggleMenu);
+
+        document.getElementById('color-picker').addEventListener('input', (e) => {
+            config.baseColor.set(e.target.value);
+            const hsl = {}; config.baseColor.getHSL(hsl);
+            config.secondaryColor.setHSL((hsl.h + 0.5) % 1.0, hsl.s, hsl.l);
+            if (config.currentShape !== 'image') generateParticles(config.currentShape);
+        });
+
+        document.getElementById('fullscreen-btn').addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => console.warn(err));
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen().catch(err => console.warn(err));
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        const videoElement = document.getElementById('input_video');
+        const statusDot = document.getElementById('status-dot');
+        const statusText = document.getElementById('status-text');
+        const loader = document.getElementById('loader');
+        const startScreen = document.getElementById('start-screen');
+        const startBtn = document.getElementById('start-btn');
+        const previewContainer = document.getElementById('cam-preview');
+        const retryBtn = document.getElementById('retry-btn');
+        const loadingText = document.getElementById('loading-text');
+        const spinner = document.querySelector('.spinner');
+
+        function distance(p1, p2) {
+            return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+        }
+
+        function onResults(results) {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+                statusDot.classList.add('active');
+                
+                const palmCenter = landmarks[9];
+                const tips = [4, 8, 12, 16, 20];
+                let totalDist = 0;
+                tips.forEach(idx => { totalDist += distance(palmCenter, landmarks[idx]); });
+                const avgDist = totalDist / 5;
+                const minOpen = 0.1; const maxOpen = 0.4;
+                let openness = (avgDist - minOpen) / (maxOpen - minOpen);
+                openness = Math.max(0, Math.min(1, openness));
+                config.targetHandFactor = openness;
+                
+                const rangeX = 22; const rangeY = 16;
+                const targetX = (0.5 - palmCenter.x) * rangeX; 
+                const targetY = (0.5 - palmCenter.y) * rangeY;
+                config.targetHandPosition.set(targetX, targetY, 0);
+
+                const percent = Math.round(openness * 100);
+                statusText.innerText = `TAY ĐANG HOẠT ĐỘNG (${percent}%)`;
+                statusText.style.color = "#00d2ff";
+            } else {
+                statusDot.classList.remove('active');
+                statusText.innerText = "ĐANG TÌM KIẾM TÍN HIỆU...";
+                statusText.style.color = "#8aa";
+                config.targetHandFactor = 0.6; 
+                config.targetHandPosition.set(0, 0, 0);
+            }
+        }
+
+        const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+        hands.onResults(onResults);
+
+        function startCamera() {
+            loader.style.display = 'flex';
+            retryBtn.style.display = 'none';
+            loadingText.innerText = "Đang kết nối camera...";
+            spinner.style.display = 'block';
+            
+            const cameraUtils = new Camera(videoElement, {
+                onFrame: async () => { await hands.send({image: videoElement}); },
+                width: 640, height: 480
+            });
+
+            cameraUtils.start().then(() => {
+                loader.style.display = 'none';
+                if(videoElement.srcObject) {
+                    const vid = document.createElement('video');
+                    vid.srcObject = videoElement.srcObject;
+                    vid.autoplay = true; vid.muted = true; vid.playsInline = true;
+                    previewContainer.innerHTML = ''; previewContainer.appendChild(vid);
+                }
+            }).catch(error => {
+                console.error("Camera access denied or failed:", error);
+                loadingText.innerText = "Không thể truy cập camera. Vui lòng cấp quyền!";
+                loadingText.style.color = "#ff4444";
+                spinner.style.display = 'none';
+                retryBtn.style.display = 'inline-block';
+            });
+        }
+
+        startBtn.addEventListener('click', () => {
+            startScreen.style.opacity = 0;
+            setTimeout(() => { startScreen.style.display = 'none'; }, 500);
+            startCamera();
+        });
+
+        retryBtn.addEventListener('click', () => {
+            loadingText.style.color = "#00d2ff";
+            startCamera();
+        });
+
+
+        // Khởi tạo ban đầu
+        generateParticles('heart');
+
+    </script>
+</body>
+</html>
